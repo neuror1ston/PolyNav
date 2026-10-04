@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "stubname",
+  "version": "${version}",
+  "name": "NPC Navs",
+  "description": "High-performance Polygon NavMesh and Smart NPC Navigation mod for Fabric 1.20.1",
+  "authors": [
+    "stubname"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "ua.stubname.NpcNavsMod"
+    ],
+    "client": [
+      "ua.stubname.client.NpcNavsClientMod"
+    ]
+  },
+  "mixins": [
+    "stubname.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.14.21",
+    "minecraft": "~1.20.1",
+    "java": ">=17",
+    "fabric-api": "*"
+  }
+}

@@ -1,0 +1,18 @@
+# Gradle
+.gradle/
+build/
+
+# Fabric / Minecraft run directory (saves, client logs, etc.)
+run/
+logs/
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# System
+.DS_Store
+Thumbs.db
