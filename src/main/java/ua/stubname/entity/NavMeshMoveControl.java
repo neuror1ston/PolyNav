@@ -27,7 +27,8 @@ import java.util.List;
 
 public class NavMeshMoveControl extends MoveControl {
     private final NpcEntity npc;
-    private BlockPos openedDoorPos = null;
+    private BlockPos doorToClose = null;
+    private boolean passedThroughDoor = false;
     private int stuckTicks = 0;
 
     public NavMeshMoveControl(NpcEntity npc) {
@@ -39,7 +40,9 @@ public class NavMeshMoveControl extends MoveControl {
     public void tick() {
         NavPath path = npc.getCurrentNavPath();
         if (path == null || path.isFinished()) {
-            checkAndCloseDoorBehind();
+            if (passedThroughDoor) {
+                checkAndCloseDoorBehind();
+            }
             npc.forwardSpeed = 0.0f;
             stuckTicks = 0;
             return;
@@ -67,15 +70,17 @@ public class NavMeshMoveControl extends MoveControl {
         double dz = targetPos.z - npc.getZ();
         double distSq = dx * dx + dz * dz;
 
-        // Reach distance: 0.50m allows natural waypoint switching around corners
-        double reachDistance = currentTarget.isDoor() ? 0.35 : 0.50;
+        // Reach distance: 0.38m allows natural, tight waypoint following along curves
+        double reachDistance = currentTarget.isDoor() ? 0.35 : 0.38;
         if (distSq < reachDistance * reachDistance) {
             path.advance();
             ua.stubname.network.PathNetwork.sendPathToClients(npc, path);
 
             if (path.isFinished()) {
                 npc.forwardSpeed = 0.0f;
-                checkAndCloseDoorBehind();
+                if (passedThroughDoor) {
+                    checkAndCloseDoorBehind();
+                }
                 return;
             }
             currentTarget = path.getCurrentPoint();
@@ -85,6 +90,14 @@ public class NavMeshMoveControl extends MoveControl {
             }
             dx = targetPos.x - npc.getX();
             dz = targetPos.z - npc.getZ();
+        }
+
+        // Track whether NPC reached the doorway threshold
+        if (doorToClose != null) {
+            double distSqToDoor = npc.squaredDistanceTo(doorToClose.getX() + 0.5, npc.getY(), doorToClose.getZ() + 0.5);
+            if (distSqToDoor < 1.44) {
+                passedThroughDoor = true;
+            }
         }
 
         // Direct move vector towards goal
@@ -170,16 +183,17 @@ public class NavMeshMoveControl extends MoveControl {
     private void handleDoorsAhead(NavPath path) {
         World world = npc.getWorld();
 
-        // 1. Scan ahead in path
-        for (int i = path.getCurrentIndex(); i < Math.min(path.getPoints().size(), path.getCurrentIndex() + 5); i++) {
+        // 1. Scan immediate door ahead (next 2 points)
+        for (int i = path.getCurrentIndex(); i < Math.min(path.getPoints().size(), path.getCurrentIndex() + 2); i++) {
             NavPathPoint pt = path.getPoints().get(i);
             if (pt.isDoor() && pt.getDoorPos() != null) {
                 tryOpenDoor(pt.getDoorPos());
+                return;
             }
         }
 
-        // 2. Also scan directly in front
-        Vec3d lookVec = npc.getRotationVec(1.0f).multiply(2.5);
+        // 2. Also scan directly in front (1.5 blocks)
+        Vec3d lookVec = npc.getRotationVec(1.0f).multiply(1.5);
         BlockPos aheadPos = BlockPos.ofFloored(npc.getX() + lookVec.x, npc.getY() + 0.5, npc.getZ() + lookVec.z);
         BlockState aheadState = world.getBlockState(aheadPos);
         if (aheadState.getBlock() instanceof DoorBlock || aheadState.getBlock() instanceof FenceGateBlock) {
@@ -191,21 +205,24 @@ public class NavMeshMoveControl extends MoveControl {
         World world = npc.getWorld();
         double distSq = npc.squaredDistanceTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
 
-        if (distSq < 12.25) {
+        // Open only when within 2.2m of the door
+        if (distSq < 5.0) {
             BlockState state = world.getBlockState(pos);
             if (state.getBlock() instanceof DoorBlock doorBlock) {
                 boolean isOpen = state.get(DoorBlock.OPEN);
                 if (!isOpen) {
                     setDoorState(world, doorBlock, state, pos, true);
-                    this.openedDoorPos = getLowerDoorPos(state, pos);
                 }
+                this.doorToClose = getLowerDoorPos(state, pos);
+                this.passedThroughDoor = false;
             } else if (state.getBlock() instanceof FenceGateBlock) {
                 boolean isOpen = state.get(FenceGateBlock.OPEN);
                 if (!isOpen) {
                     world.setBlockState(pos, state.with(FenceGateBlock.OPEN, true), Block.NOTIFY_ALL | Block.REDRAW_ON_MAIN_THREAD);
                     world.emitGameEvent(npc, GameEvent.BLOCK_OPEN, pos);
-                    this.openedDoorPos = pos;
                 }
+                this.doorToClose = pos;
+                this.passedThroughDoor = false;
             }
         }
     }
@@ -237,20 +254,22 @@ public class NavMeshMoveControl extends MoveControl {
     }
 
     private void checkAndCloseDoorBehind() {
-        if (openedDoorPos == null) return;
+        if (doorToClose == null || !passedThroughDoor) return;
 
         World world = npc.getWorld();
-        double distSq = npc.squaredDistanceTo(openedDoorPos.getX() + 0.5, openedDoorPos.getY(), openedDoorPos.getZ() + 0.5);
+        double distSq = npc.squaredDistanceTo(doorToClose.getX() + 0.5, npc.getY(), doorToClose.getZ() + 0.5);
 
-        if (distSq > 5.0) {
-            BlockState state = world.getBlockState(openedDoorPos);
+        // Only close after the NPC has passed through and walked at least 2.2m away on the other side
+        if (distSq > 4.84) {
+            BlockState state = world.getBlockState(doorToClose);
             if (state.getBlock() instanceof DoorBlock doorBlock && state.get(DoorBlock.OPEN)) {
-                setDoorState(world, doorBlock, state, openedDoorPos, false);
+                setDoorState(world, doorBlock, state, doorToClose, false);
             } else if (state.getBlock() instanceof FenceGateBlock && state.get(FenceGateBlock.OPEN)) {
-                world.setBlockState(openedDoorPos, state.with(FenceGateBlock.OPEN, false), Block.NOTIFY_ALL | Block.REDRAW_ON_MAIN_THREAD);
-                world.emitGameEvent(npc, GameEvent.BLOCK_CLOSE, openedDoorPos);
+                world.setBlockState(doorToClose, state.with(FenceGateBlock.OPEN, false), Block.NOTIFY_ALL | Block.REDRAW_ON_MAIN_THREAD);
+                world.emitGameEvent(npc, GameEvent.BLOCK_CLOSE, doorToClose);
             }
-            this.openedDoorPos = null;
+            this.doorToClose = null;
+            this.passedThroughDoor = false;
         }
     }
 

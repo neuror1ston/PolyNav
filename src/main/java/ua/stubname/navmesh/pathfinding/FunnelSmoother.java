@@ -85,7 +85,8 @@ public class FunnelSmoother {
             currentIdx = furthestVisible;
         }
 
-        return smoothed;
+        // Pass 2: Round corners with hitbox verification for natural smooth turning
+        return roundCorners(world, smoothed, config);
     }
 
     private static boolean isCollinear(Vec3d a, Vec3d b, Vec3d c) {
@@ -140,6 +141,111 @@ public class FunnelSmoother {
         return !belowShape.isEmpty();
     }
 
+    private static List<NavPathPoint> roundCorners(ServerWorld world, List<NavPathPoint> points, NavMeshConfig config) {
+        if (points.size() < 3) return points;
+
+        double agentRadius = Math.max(0.35, config.agentRadius);
+        double agentHeight = config.agentHeight;
+
+        List<NavPathPoint> result = new ArrayList<>();
+        result.add(points.get(0));
+
+        int i = 1;
+        while (i < points.size() - 1) {
+            NavPathPoint prev = points.get(i - 1);
+            NavPathPoint curr = points.get(i);
+            NavPathPoint next = points.get(i + 1);
+
+            // Never round doorways or vertical elevation changes (stairs, slabs, blocks)
+            if (curr.isDoor() || prev.isDoor() || next.isDoor() ||
+                Math.abs(curr.getY() - prev.getY()) > 0.15 || Math.abs(next.getY() - curr.getY()) > 0.15) {
+                result.add(curr);
+                i++;
+                continue;
+            }
+
+            Vec3d v1 = curr.getPos().subtract(prev.getPos());
+            Vec3d v2 = next.getPos().subtract(curr.getPos());
+            double len1 = Math.sqrt(v1.x * v1.x + v1.z * v1.z);
+            double len2 = Math.sqrt(v2.x * v2.x + v2.z * v2.z);
+
+            if (len1 < 0.6 || len2 < 0.6) {
+                result.add(curr);
+                i++;
+                continue;
+            }
+
+            Vec3d dir1 = new Vec3d(v1.x / len1, 0, v1.z / len1);
+            Vec3d dir2 = new Vec3d(v2.x / len2, 0, v2.z / len2);
+            double dot = dir1.dotProduct(dir2);
+
+            // Only round corners (angle between ~25 deg and 150 deg)
+            if (dot > 0.90 || dot < -0.85) {
+                result.add(curr);
+                i++;
+                continue;
+            }
+
+            // Fillet radius along the incoming and outgoing legs
+            double maxFillet = Math.min(0.65, Math.min(len1, len2) * 0.45);
+            List<NavPathPoint> curvePoints = null;
+
+            // Try candidate scales: largest smooth curve to smallest safe curve
+            double[] candidateScales = {1.0, 0.70, 0.45};
+            for (double scale : candidateScales) {
+                double s = maxFillet * scale;
+                if (s < 0.20) break;
+
+                Vec3d pA = curr.getPos().subtract(dir1.multiply(s));
+                Vec3d pB = curr.getPos().add(dir2.multiply(s));
+
+                // 3 intermediate Bezier curve points
+                Vec3d q1 = evalBezier(pA, curr.getPos(), pB, 0.25);
+                Vec3d q2 = evalBezier(pA, curr.getPos(), pB, 0.50);
+                Vec3d q3 = evalBezier(pA, curr.getPos(), pB, 0.75);
+
+                Vec3d[] testPoints = {pA, q1, q2, q3, pB};
+                boolean valid = true;
+
+                for (Vec3d pt : testPoints) {
+                    if (!isPositionClear(world, pt.x, pt.y, pt.z, agentRadius, agentHeight) ||
+                        !hasSolidGroundBeneath(world, pt.x, pt.y, pt.z)) {
+                        valid = false;
+                        break;
+                    }
+                }
+
+                if (valid) {
+                    curvePoints = new ArrayList<>();
+                    curvePoints.add(new NavPathPoint(pA, false, null, 0f));
+                    curvePoints.add(new NavPathPoint(q1, false, null, 0f));
+                    curvePoints.add(new NavPathPoint(q2, false, null, 0f));
+                    curvePoints.add(new NavPathPoint(q3, false, null, 0f));
+                    curvePoints.add(new NavPathPoint(pB, false, null, 0f));
+                    break;
+                }
+            }
+
+            if (curvePoints != null) {
+                result.addAll(curvePoints);
+            } else {
+                result.add(curr);
+            }
+            i++;
+        }
+
+        result.add(points.get(points.size() - 1));
+        return result;
+    }
+
+    private static Vec3d evalBezier(Vec3d a, Vec3d ctrl, Vec3d b, double t) {
+        double u = 1.0 - t;
+        double x = u * u * a.x + 2 * u * t * ctrl.x + t * t * b.x;
+        double y = u * u * a.y + 2 * u * t * ctrl.y + t * t * b.y;
+        double z = u * u * a.z + 2 * u * t * ctrl.z + t * t * b.z;
+        return new Vec3d(x, y, z);
+    }
+
     private static boolean isPositionClear(ServerWorld world, double x, double y, double z, double radius, double height) {
         Box box = new Box(x - radius, y + 0.1, z - radius, x + radius, y + height, z + radius);
 
@@ -147,6 +253,11 @@ public class FunnelSmoother {
         BlockPos max = BlockPos.ofFloored(box.maxX, box.maxY, box.maxZ);
 
         for (BlockPos pos : BlockPos.iterate(min, max)) {
+            FluidState fluid = world.getFluidState(pos);
+            if (fluid.isIn(FluidTags.WATER) || fluid.isIn(FluidTags.LAVA)) {
+                return false;
+            }
+
             BlockState state = world.getBlockState(pos);
             if (state.isAir() || state.getBlock() instanceof DoorBlock || state.getBlock() instanceof FenceGateBlock) {
                 continue;
