@@ -5,16 +5,27 @@ import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
+import ua.stubname.api.INavMeshAgent;
 import ua.stubname.navmesh.pathfinding.AsyncPathProcessor;
 import ua.stubname.navmesh.pathfinding.NavPath;
 
 public class NavMeshNavigation extends MobNavigation {
-    private final NpcEntity npc;
+    private final MobEntity mob;
+    private final INavMeshAgent agent;
     private Vec3d pendingTarget;
 
+    public NavMeshNavigation(MobEntity mob, INavMeshAgent agent, World world) {
+        super(mob, world);
+        this.mob = mob;
+        this.agent = agent;
+    }
+
+    public NavMeshNavigation(MobEntity mob, World world) {
+        this(mob, (INavMeshAgent) mob, world);
+    }
+
     public NavMeshNavigation(NpcEntity entity, World world) {
-        super(entity, world);
-        this.npc = entity;
+        this(entity, entity, world);
     }
 
     public boolean navigateTo(Vec3d target, double speed) {
@@ -27,19 +38,19 @@ public class NavMeshNavigation extends MobNavigation {
 
         AsyncPathProcessor processor = AsyncPathProcessor.getInstance();
         if (processor != null) {
-            processor.requestPath(serverWorld, npc.getPos(), target, path -> {
+            processor.requestPath(serverWorld, mob.getPos(), target, path -> {
                 if (path != null && !path.isFinished()) {
                     if (path.getCurrentPoint() != null) {
-                        double dSq = npc.squaredDistanceTo(path.getCurrentPoint().getPos());
+                        double dSq = mob.squaredDistanceTo(path.getCurrentPoint().getPos());
                         if (dSq < 0.49) { // within 0.7 blocks of start position
                             path.advance();
                         }
                     }
-                    npc.setCurrentNavPath(path);
-                    npc.setMovementSpeed((float) speed);
+                    agent.setCurrentNavPath(path);
+                    mob.setMovementSpeed((float) speed);
                 } else {
                     // Fallback or no path found
-                    npc.setCurrentNavPath(null);
+                    agent.setCurrentNavPath(null);
                 }
             });
             return true;
@@ -54,7 +65,7 @@ public class NavMeshNavigation extends MobNavigation {
     @Override
     public void stop() {
         super.stop();
-        npc.setCurrentNavPath(null);
+        agent.setCurrentNavPath(null);
         this.pendingTarget = null;
     }
 }

@@ -10,10 +10,11 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import org.joml.Vector3f;
+import ua.stubname.api.INavMeshAgent;
 import ua.stubname.navmesh.pathfinding.NavPath;
 import ua.stubname.navmesh.pathfinding.NavPathPoint;
 
-public class NpcEntity extends PathAwareEntity {
+public class NpcEntity extends PathAwareEntity implements INavMeshAgent {
     private static boolean debugPathRendering = false;
 
     private final NavMeshNavigation navMeshNavigation;
