@@ -1,10 +1,14 @@
 # Gradle
 .gradle/
 build/
+out/
 
 # Fabric / Minecraft run directory (saves, client logs, etc.)
 run/
 logs/
+crash-reports/
+hs_err_pid*.log
+replay_pid*.log
 
 # IDE files
 .idea/
@@ -13,6 +17,11 @@ logs/
 *.iws
 .vscode/
 
-# System
+# System & Temp
 .DS_Store
 Thumbs.db
+*.tmp
+*.bak
+*.swp
+*~
+*.log
