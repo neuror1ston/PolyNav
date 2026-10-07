@@ -85,6 +85,41 @@ public class NavMesh {
         return bestNode;
     }
 
+    public NavNode findRandomNode(Vec3d center, double maxRadius, java.util.Random random) {
+        List<NavNode> candidates = getNodesInRadius(center, maxRadius);
+        if (candidates.isEmpty()) return null;
+        return candidates.get(random.nextInt(candidates.size()));
+    }
+
+    public NavNode findRandomNode(Vec3d center, double maxRadius, net.minecraft.util.math.random.Random random) {
+        List<NavNode> candidates = getNodesInRadius(center, maxRadius);
+        if (candidates.isEmpty()) return null;
+        return candidates.get(random.nextInt(candidates.size()));
+    }
+
+    public List<NavNode> getNodesInRadius(Vec3d center, double maxRadius) {
+        int centerCellX = (int) Math.floor(center.x / GRID_CELL_SIZE);
+        int centerCellZ = (int) Math.floor(center.z / GRID_CELL_SIZE);
+        int cellRadius = (int) Math.ceil(maxRadius / GRID_CELL_SIZE);
+
+        List<NavNode> candidates = new ArrayList<>();
+        double maxDistSq = maxRadius * maxRadius;
+
+        for (int cx = centerCellX - cellRadius; cx <= centerCellX + cellRadius; cx++) {
+            for (int cz = centerCellZ - cellRadius; cz <= centerCellZ + cellRadius; cz++) {
+                List<NavNode> cellNodes = spatialGrid.get(getSpatialKey(cx, cz));
+                if (cellNodes == null) continue;
+
+                for (NavNode node : cellNodes) {
+                    if (node.distanceSquaredTo(center.x, center.y, center.z) <= maxDistSq) {
+                        candidates.add(node);
+                    }
+                }
+            }
+        }
+        return candidates;
+    }
+
     public void rebuildSpatialGrid() {
         spatialGrid.clear();
         for (NavNode node : nodes.values()) {

@@ -95,7 +95,7 @@ public class FunnelSmoother {
         return ab.dotProduct(ac) > 0.985;
     }
 
-    private static boolean hasSafeClearance(ServerWorld world, Vec3d from, Vec3d to, double requiredClearance, double height) {
+    public static boolean hasSafeClearance(ServerWorld world, Vec3d from, Vec3d to, double requiredClearance, double height) {
         double dist = from.distanceTo(to);
         int steps = Math.max(2, (int) Math.ceil(dist / 0.25));
 
@@ -246,7 +246,7 @@ public class FunnelSmoother {
         return new Vec3d(x, y, z);
     }
 
-    private static boolean isPositionClear(ServerWorld world, double x, double y, double z, double radius, double height) {
+    public static boolean isPositionClear(ServerWorld world, double x, double y, double z, double radius, double height) {
         Box box = new Box(x - radius, y + 0.1, z - radius, x + radius, y + height, z + radius);
 
         BlockPos min = BlockPos.ofFloored(box.minX, box.minY, box.minZ);

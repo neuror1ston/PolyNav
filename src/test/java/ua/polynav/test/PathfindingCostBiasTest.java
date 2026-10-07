@@ -111,4 +111,22 @@ public class PathfindingCostBiasTest {
         // All intermediate stair steps must be preserved for smooth climbing
         assertEquals(5, path.getPoints().size(), "Floor + 3 stair steps + landing should preserve all stair waypoints!");
     }
+
+    @Test
+    public void testRandomNodeInRadius() {
+        BlockBox box = new BlockBox(0, 60, 0, 100, 70, 100);
+        NavMesh mesh = new NavMesh("random_test", box);
+
+        mesh.addNode(new NavNode(1, 10.0, 64.0, 10.0, 1.0, NavNode.NodeType.NORMAL));
+        mesh.addNode(new NavNode(2, 12.0, 64.0, 10.0, 1.0, NavNode.NodeType.NORMAL));
+        mesh.addNode(new NavNode(3, 30.0, 64.0, 30.0, 1.0, NavNode.NodeType.NORMAL));
+
+        java.util.List<NavNode> inRadius = mesh.getNodesInRadius(new Vec3d(10.0, 64.0, 10.0), 5.0);
+        assertEquals(2, inRadius.size(), "Should only find nodes within 5 blocks of (10, 64, 10)");
+
+        java.util.Random rnd = new java.util.Random(42);
+        NavNode randomNode = mesh.findRandomNode(new Vec3d(10.0, 64.0, 10.0), 5.0, rnd);
+        assertNotNull(randomNode);
+        assertTrue(randomNode.getId() == 1 || randomNode.getId() == 2);
+    }
 }

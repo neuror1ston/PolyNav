@@ -41,9 +41,20 @@ public class NavMeshPathfinder {
         }
 
         if (startNode.getId() == goalNode.getId()) {
-            List<NavPathPoint> single = new ArrayList<>();
-            single.add(new NavPathPoint(goalPos, false, null, 0f));
-            return new NavPath(single, 0.0);
+            if (world == null || FunnelSmoother.hasSafeClearance(world, startPos, goalPos, 0.30, config.agentHeight)) {
+                List<NavPathPoint> single = new ArrayList<>();
+                single.add(new NavPathPoint(goalPos, false, null, 0f));
+                return new NavPath(single, 0.0);
+            } else {
+                // Goal is obstructed or inside a wall. If startPos hasn't reached goalNode yet, navigate to goalNode
+                if (startPos.squaredDistanceTo(goalNode.getPos()) > 0.25 &&
+                        (world == null || FunnelSmoother.hasSafeClearance(world, startPos, goalNode.getPos(), 0.30, config.agentHeight))) {
+                    List<NavPathPoint> single = new ArrayList<>();
+                    single.add(new NavPathPoint(goalNode.getPos(), false, null, 0f));
+                    return new NavPath(single, 0.0);
+                }
+                return null;
+            }
         }
 
         Map<Integer, Double> gScore = new HashMap<>();
@@ -65,7 +76,7 @@ public class NavMeshPathfinder {
 
             if (currentId == goalNode.getId()) {
                 // Goal reached! Reconstruct raw path
-                List<NavPathPoint> rawPath = reconstructPath(mesh, cameFromNode, cameFromEdge, currentId, startPos, goalPos);
+                List<NavPathPoint> rawPath = reconstructPath(world, mesh, cameFromNode, cameFromEdge, currentId, startPos, goalPos);
                 List<NavPathPoint> smoothed = FunnelSmoother.smooth(world, rawPath, config);
                 return new NavPath(smoothed, gScore.getOrDefault(currentId, 0.0));
             }
@@ -109,7 +120,7 @@ public class NavMeshPathfinder {
         return a.distanceTo(b.getX(), b.getY(), b.getZ()) * 0.5;
     }
 
-    private List<NavPathPoint> reconstructPath(NavMesh mesh, Map<Integer, Integer> cameFromNode, Map<Integer, NavEdge> cameFromEdge,
+    private List<NavPathPoint> reconstructPath(ServerWorld world, NavMesh mesh, Map<Integer, Integer> cameFromNode, Map<Integer, NavEdge> cameFromEdge,
                                                int goalId, Vec3d startPos, Vec3d goalPos) {
         LinkedList<NavPathPoint> points = new LinkedList<>();
 
@@ -137,9 +148,15 @@ public class NavMeshPathfinder {
             points.addFirst(new NavPathPoint(startPos, false, null, 0f));
         }
 
-        // Add goalPos if distinct from goalNode
+        // Add goalPos only if distinct from last point AND safely reachable without clipping into obstacles
         if (points.isEmpty() || goalPos.squaredDistanceTo(points.getLast().getPos()) > 0.05) {
-            points.addLast(new NavPathPoint(goalPos, false, null, 0f));
+            NavNode goalNode = mesh.getNode(goalId);
+            Vec3d anchorPos = goalNode != null ? goalNode.getPos() : points.getLast().getPos();
+            boolean canReachGoal = (world == null) ||
+                    FunnelSmoother.hasSafeClearance(world, anchorPos, goalPos, 0.30, config.agentHeight);
+            if (canReachGoal) {
+                points.addLast(new NavPathPoint(goalPos, false, null, 0f));
+            }
         }
 
         return points;

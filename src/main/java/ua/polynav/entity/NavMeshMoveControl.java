@@ -138,14 +138,15 @@ public class NavMeshMoveControl extends MoveControl {
             }
         }
 
-        // 5. Collision Unstuck Handling (Nudge out of corners without rotating head)
+        // 5. Collision & Stuck Handling (Never use setPosition to bypass block collision/hitbox!)
         if (mob.horizontalCollision) {
             stuckTicks++;
-            if (stuckTicks >= 2 && !isFullBlockClimb) {
-                // Instantly unstick by sliding 0.06m towards goal or away from obstacle
-                Vec3d nudge = moveDir.multiply(0.06);
-                mob.setPosition(mob.getX() + nudge.x, mob.getY(), mob.getZ() + nudge.z);
+            if (stuckTicks >= 30) {
+                // Agent has been blocked by an obstacle for 1.5s; abort path gracefully
+                agent.setCurrentNavPath(null);
+                mob.forwardSpeed = 0.0f;
                 stuckTicks = 0;
+                return;
             }
         } else {
             stuckTicks = Math.max(0, stuckTicks - 1);

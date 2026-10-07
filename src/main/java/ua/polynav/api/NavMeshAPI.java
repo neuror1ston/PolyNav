@@ -99,6 +99,22 @@ public final class NavMeshAPI {
     }
 
     /**
+     * Finds a random walkable node within radius on the NavMesh covering the center position.
+     */
+    public static NavNode getRandomNodeInRadius(Vec3d center, double maxRadius, java.util.Random random) {
+        NavMesh mesh = getMeshAt(center);
+        return mesh != null ? mesh.findRandomNode(center, maxRadius, random) : null;
+    }
+
+    /**
+     * Finds a random walkable node within radius on the NavMesh covering the center position.
+     */
+    public static NavNode getRandomNodeInRadius(Vec3d center, double maxRadius, net.minecraft.util.math.random.Random random) {
+        NavMesh mesh = getMeshAt(center);
+        return mesh != null ? mesh.findRandomNode(center, maxRadius, random) : null;
+    }
+
+    /**
      * Bakes a NavMesh region asynchronously and registers it into the NavMeshManager.
      */
     public static CompletableFuture<NavMesh> bakeAreaAsync(ServerWorld world, String name, BlockBox bounds) {
